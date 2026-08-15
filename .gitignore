@@ -6,6 +6,19 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+node_modules
+.next
+dist/
+.env.*
+!.env.example
+.env
+.env.local
+.env.*.local
+.env.production
+uploads/
+*.log
+
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
