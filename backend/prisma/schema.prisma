@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  role      UserRole @default(USER)
+  jobs      Job[]
+  resumes   Resume[]
+}
+
+model Resume {
+  id             String       @id @default(cuid())
+  /// *
+  /// * |--------------------------------------------------------------------------
+  /// * | BASIC FILE INFORMATION
+  /// * |--------------------------------------------------------------------------
+  fileName       String
+  storedName     String
+  fileSize       Int
+  mimeType       String
+  extractedText  String
+  aiScore        Int
+  summary        String
+  skills         Json
+  experience     Json
+  education      Json
+  projects       Json
+  certifications Json
+  strengths      Json
+  weaknesses     Json
+  suggestions    Json
+  status         ResumeStatus @default(PROCESSING)
+  /// *
+  /// * |--------------------------------------------------------------------------
+  /// * | TIMESTAMPS
+  /// * |--------------------------------------------------------------------------
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  /// *
+  /// * |--------------------------------------------------------------------------
+  /// * | USER
+  /// * |--------------------------------------------------------------------------
+  uploadedById   String
+  /// *
+  /// * |--------------------------------------------------------------------------
+  /// * | CANDIDATE INFORMATION
+  /// * |--------------------------------------------------------------------------
+  candidateEmail String?
+  candidateName  String?
+  candidatePhone String?
+  builderData    Json?
+  achievements   Json?
+  github         String?
+  languages      Json?
+  linkedin       String?
+  location       String?
+  title          String?
+  website        String?
+  analyses       Analysis[]
+  matches        Match[]
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([uploadedById])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model Job {
+  id             String     @id @default(cuid())
+  title          String
+  company        String
+  location       String?
+  employmentType String?
+  description    String
+  requirements   String
+  salary         String?
+  requiredSkills Json
+  status         JobStatus  @default(ACTIVE)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  createdById    String
+  analyses       Analysis[]
+  createdBy      User       @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  matches        Match[]
+}
+
+model Analysis {
+  id                   String   @id @default(cuid())
+  resumeId             String
+  jobId                String
+  matchScore           Int      @default(0)
+  matchedSkills        Json
+  missingSkills        Json
+  strengths            Json
+  weaknesses           Json
+  recommendations      Json
+  hiringRecommendation String   @default("PENDING")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  job                  Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume               Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@index([resumeId])
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+model Match {
+  id                   String   @id @default(cuid())
+  resumeId             String
+  jobId                String
+  matchScore           Int
+  matchedSkills        Json
+  missingSkills        Json
+  strengths            Json
+  weaknesses           Json
+  recommendations      Json
+  hiringRecommendation String
+  createdAt            DateTime @default(now())
+  job                  Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume               Resume   @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ResumeStatus {
+  PROCESSING
+  ANALYZED
+  FAILED
+  DRAFT
+}
+
+enum JobStatus {
+  ACTIVE
+  CLOSED
+  DRAFT
+}
