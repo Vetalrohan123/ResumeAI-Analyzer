@@ -1,7 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  Suspense,
+  useState,
+} from "react";
+
 import Link from "next/link";
+
 import {
   ArrowRight,
   Eye,
@@ -9,10 +15,18 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+
 import { authApi } from "@/lib/api";
 
-export default function LoginPage() {
+/* ============================================================
+   LOGIN FORM
+============================================================ */
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -30,6 +44,10 @@ export default function LoginPage() {
 
   const [password, setPassword] =
     useState("");
+
+  /* ==========================================================
+     SUBMIT
+  ========================================================== */
 
   const handleSubmit = async (
     e: FormEvent<HTMLFormElement>
@@ -59,22 +77,19 @@ export default function LoginPage() {
         );
       }
 
+      if (password.length < 8) {
+        throw new Error(
+          "Password must contain at least 8 characters."
+        );
+      }
+
       console.log(
         "[LOGIN] Starting login..."
       );
 
       /*
-       * IMPORTANT:
-       *
-       * authApi.login() uses HTTP-only cookies.
-       *
-       * We DO NOT:
-       *
-       * localStorage.getItem(...)
-       * localStorage.setItem(...)
-       * sessionStorage.setItem(...)
-       *
-       * The browser handles the cookie automatically.
+       * authApi.login() should set the
+       * HTTP-only authentication cookie.
        */
 
       const response =
@@ -88,9 +103,9 @@ export default function LoginPage() {
         response
       );
 
-      if (!response.success) {
+      if (!response?.success) {
         throw new Error(
-          response.message ||
+          response?.message ||
             "Login failed."
         );
       }
@@ -100,12 +115,7 @@ export default function LoginPage() {
       );
 
       /*
-       * Verify the session with the backend.
-       *
-       * This request sends the HTTP-only cookie
-       * automatically because apiRequest() uses:
-       *
-       * credentials: "include"
+       * Verify the authentication session.
        */
 
       console.log(
@@ -121,8 +131,8 @@ export default function LoginPage() {
       );
 
       if (
-        !me.success ||
-        !me.user
+        !me?.success ||
+        !me?.user
       ) {
         throw new Error(
           "Login succeeded, but the authentication session could not be verified."
@@ -135,7 +145,10 @@ export default function LoginPage() {
       );
 
       /*
-       * Get redirect URL if one exists.
+       * Read redirect query parameter.
+       *
+       * Example:
+       * /login?redirect=/dashboard/jobs
        */
 
       const redirect =
@@ -144,14 +157,18 @@ export default function LoginPage() {
         );
 
       /*
-       * Prevent redirecting to login/signup.
+       * Only allow internal paths.
+       *
+       * This prevents redirects such as:
+       * https://malicious-site.com
        */
 
       const safeRedirect =
         redirect &&
         redirect.startsWith("/") &&
         !redirect.startsWith("//") &&
-        redirect !== "/login"
+        redirect !== "/login" &&
+        redirect !== "/register"
           ? redirect
           : "/dashboard";
 
@@ -197,7 +214,11 @@ export default function LoginPage() {
 
         <section className="relative hidden min-h-screen overflow-hidden border-r border-[#1d1d1d] lg:flex">
 
+          {/* Background glow */}
+
           <div className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/10 blur-[120px]" />
+
+          {/* Content */}
 
           <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
 
@@ -227,9 +248,9 @@ export default function LoginPage() {
               </h1>
 
               <p className="mt-6 max-w-lg text-base leading-7 text-zinc-400">
-                Analyze your resume against real job descriptions,
-                discover skill gaps, and get actionable AI
-                recommendations.
+                Analyze your resume against real job
+                descriptions, discover skill gaps, and
+                get actionable AI recommendations.
               </p>
 
               {/* STATS */}
@@ -308,7 +329,8 @@ export default function LoginPage() {
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-zinc-500">
-                Sign in to continue analyzing and improving your resume.
+                Sign in to continue analyzing and
+                improving your resume.
               </p>
 
             </div>
@@ -536,3 +558,27 @@ export default function LoginPage() {
   );
 }
 
+/* ============================================================
+   PAGE
+   Suspense is required because LoginForm uses useSearchParams()
+============================================================ */
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#080808] text-white">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
+
+            <p className="text-sm text-zinc-500">
+              Loading...
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}

@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 
 import {
+  FormEvent,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -22,20 +24,18 @@ import {
   HistoryAnalysis,
 } from "@/lib/api";
 
+const ITEMS_PER_PAGE = 10;
+
 export default function HistoryPage() {
-  const [analyses, setAnalyses] =
-    useState<HistoryAnalysis[]>([]);
+  const [analyses, setAnalyses] = useState<
+    HistoryAnalysis[]
+  >([]);
 
-  const [page, setPage] =
-    useState(1);
+  const [page, setPage] = useState(1);
 
-  const [totalPages, setTotalPages] =
-    useState(1);
+  const [search, setSearch] = useState("");
 
-  const [total, setTotal] =
-    useState(0);
-
-  const [search, setSearch] =
+  const [searchInput, setSearchInput] =
     useState("");
 
   const [loading, setLoading] =
@@ -44,32 +44,23 @@ export default function HistoryPage() {
   const [error, setError] =
     useState("");
 
-  useEffect(() => {
-    loadHistory();
-  }, [page]);
-
+  /*
+   * Load complete history from the current API.
+   *
+   * getHistory() currently takes no arguments
+   * and returns HistoryAnalysis[].
+   */
   async function loadHistory() {
     try {
       setLoading(true);
       setError("");
 
-      const result =
-        await getHistory(
-          page,
-          10,
-          search
-        );
+      const result = await getHistory();
 
       setAnalyses(
-        result.analyses
-      );
-
-      setTotal(
-        result.pagination.total
-      );
-
-      setTotalPages(
-        result.pagination.totalPages
+        Array.isArray(result)
+          ? result
+          : []
       );
     } catch (error) {
       console.error(
@@ -82,19 +73,111 @@ export default function HistoryPage() {
           ? error.message
           : "Failed to load history"
       );
+
+      setAnalyses([]);
     } finally {
       setLoading(false);
     }
   }
 
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  /*
+   * Filter history locally because the current
+   * getHistory() API does not accept search/page
+   * parameters.
+   */
+  const filteredAnalyses = useMemo(() => {
+    const query =
+      search.trim().toLowerCase();
+
+    if (!query) {
+      return analyses;
+    }
+
+    return analyses.filter(
+      (analysis) => {
+        const resumeName =
+          analysis.resume?.fileName ??
+          "";
+
+        const jobTitle =
+          analysis.job?.title ??
+          "";
+
+        const company =
+          analysis.job?.company ??
+          "";
+
+        return (
+          resumeName
+            .toLowerCase()
+            .includes(query) ||
+          jobTitle
+            .toLowerCase()
+            .includes(query) ||
+          company
+            .toLowerCase()
+            .includes(query)
+        );
+      }
+    );
+  }, [analyses, search]);
+
+  const total =
+    filteredAnalyses.length;
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      total / ITEMS_PER_PAGE
+    )
+  );
+
+  /*
+   * Keep the current page valid when
+   * filtering changes the number of pages.
+   */
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedAnalyses =
+    useMemo(() => {
+      const start =
+        (page - 1) *
+        ITEMS_PER_PAGE;
+
+      const end =
+        start +
+        ITEMS_PER_PAGE;
+
+      return filteredAnalyses.slice(
+        start,
+        end
+      );
+    }, [
+      filteredAnalyses,
+      page,
+    ]);
+
   function handleSearch(
-    e: React.FormEvent
+    e: FormEvent<HTMLFormElement>
   ) {
     e.preventDefault();
 
     setPage(1);
+    setSearch(searchInput);
+  }
 
-    loadHistory();
+  function handleClearSearch() {
+    setSearchInput("");
+    setSearch("");
+    setPage(1);
   }
 
   return (
@@ -161,9 +244,9 @@ export default function HistoryPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
 
             <input
-              value={search}
+              value={searchInput}
               onChange={(e) =>
-                setSearch(
+                setSearchInput(
                   e.target.value
                 )
               }
@@ -181,6 +264,29 @@ export default function HistoryPage() {
           </button>
 
         </form>
+
+        {/* Active search */}
+
+        {search && (
+          <div className="mt-4 flex items-center gap-3">
+
+            <p className="text-xs text-zinc-500">
+              Showing results for{" "}
+              <span className="text-zinc-300">
+                "{search}"
+              </span>
+            </p>
+
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="text-xs text-violet-400 hover:text-violet-300"
+            >
+              Clear
+            </button>
+
+          </div>
+        )}
 
         {/* Count */}
 
@@ -206,6 +312,7 @@ export default function HistoryPage() {
         {/* Loading */}
 
         {loading ? (
+
           <div className="mt-6 rounded-2xl border border-zinc-800 bg-[#0d0d0d] p-12 text-center">
 
             <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
@@ -215,7 +322,8 @@ export default function HistoryPage() {
             </p>
 
           </div>
-        ) : analyses.length === 0 ? (
+
+        ) : paginatedAnalyses.length === 0 ? (
 
           /* Empty */
 
@@ -228,22 +336,39 @@ export default function HistoryPage() {
             </div>
 
             <h2 className="mt-5 font-medium">
-              No analyses found
+              {search
+                ? "No matching analyses"
+                : "No analyses found"}
             </h2>
 
             <p className="mt-2 text-sm text-zinc-600">
-              Start by uploading your resume
-              and adding a job description.
+              {search
+                ? "Try a different resume, job or company name."
+                : "Start by uploading your resume and adding a job description."}
             </p>
 
-            <Link
-              href="/analyze"
-              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-black hover:bg-zinc-200"
-            >
-              Analyze Resume
+            {search ? (
 
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="mt-6 inline-flex items-center gap-2 rounded-lg border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+              >
+                Clear Search
+              </button>
+
+            ) : (
+
+              <Link
+                href="/analyze"
+                className="mt-6 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-black hover:bg-zinc-200"
+              >
+                Analyze Resume
+
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+
+            )}
 
           </div>
 
@@ -252,6 +377,8 @@ export default function HistoryPage() {
           /* Results */
 
           <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-800 bg-[#0d0d0d]">
+
+            {/* Desktop */}
 
             <div className="hidden md:block">
 
@@ -289,91 +416,95 @@ export default function HistoryPage() {
 
                 <tbody>
 
-                  {analyses.map(
-                    (analysis) => (
-                      <tr
-                        key={analysis.id}
-                        className="border-b border-zinc-800 last:border-0 transition hover:bg-zinc-900/40"
-                      >
+                  {paginatedAnalyses.map(
+                    (analysis) => {
 
-                        <td className="px-6 py-5">
+                      const resumeName =
+                        analysis.resume
+                          ?.fileName ??
+                        "Resume";
 
-                          <div className="flex items-center gap-3">
+                      const jobTitle =
+                        analysis.job
+                          ?.title ??
+                        "Untitled Position";
 
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950">
+                      const company =
+                        analysis.job
+                          ?.company ??
+                        "Unknown Company";
 
-                              <FileText className="h-4 w-4 text-zinc-500" />
+                      return (
+                        <tr
+                          key={analysis.id}
+                          className="border-b border-zinc-800 last:border-0 transition hover:bg-zinc-900/40"
+                        >
+
+                          <td className="px-6 py-5">
+
+                            <div className="flex items-center gap-3">
+
+                              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950">
+
+                                <FileText className="h-4 w-4 text-zinc-500" />
+
+                              </div>
+
+                              <span className="max-w-[220px] truncate text-sm text-zinc-200">
+                                {resumeName}
+                              </span>
 
                             </div>
 
-                            <span className="max-w-[220px] truncate text-sm text-zinc-200">
-                              {
-                                analysis
-                                  .resume
-                                  .fileName
-                              }
+                          </td>
+
+                          <td className="px-6 py-5 text-sm text-zinc-400">
+                            {jobTitle}
+                          </td>
+
+                          <td className="px-6 py-5 text-sm text-zinc-500">
+                            {company}
+                          </td>
+
+                          <td className="px-6 py-5">
+
+                            <span
+                              className={`text-sm font-medium ${
+                                analysis.matchScore >=
+                                80
+                                  ? "text-emerald-400"
+                                  : analysis.matchScore >=
+                                    60
+                                  ? "text-amber-400"
+                                  : "text-red-400"
+                              }`}
+                            >
+                              {analysis.matchScore}
+                              %
                             </span>
 
-                          </div>
+                          </td>
 
-                        </td>
+                          <td className="px-6 py-5 text-xs text-zinc-600">
+                            {new Date(
+                              analysis.createdAt
+                            ).toLocaleDateString()}
+                          </td>
 
-                        <td className="px-6 py-5 text-sm text-zinc-400">
-                          {
-                            analysis
-                              .job
-                              .title
-                          }
-                        </td>
+                          <td className="px-6 py-5 text-right">
 
-                        <td className="px-6 py-5 text-sm text-zinc-500">
-                          {
-                            analysis
-                              .job
-                              .company
-                          }
-                        </td>
+                            <Link
+                              href={`/analysis/${analysis.id}`}
+                              className="inline-flex text-zinc-600 transition hover:text-white"
+                            >
+                              <ArrowUpRight className="h-4 w-4" />
+                            </Link>
 
-                        <td className="px-6 py-5">
+                          </td>
 
-                          <span
-                            className={`text-sm font-medium ${
-                              analysis.matchScore >=
-                              80
-                                ? "text-emerald-400"
-                                : analysis.matchScore >=
-                                  60
-                                ? "text-amber-400"
-                                : "text-red-400"
-                            }`}
-                          >
-                            {
-                              analysis.matchScore
-                            }
-                            %
-                          </span>
-
-                        </td>
-
-                        <td className="px-6 py-5 text-xs text-zinc-600">
-                          {new Date(
-                            analysis.createdAt
-                          ).toLocaleDateString()}
-                        </td>
-
-                        <td className="px-6 py-5 text-right">
-
-                          <Link
-                            href={`/analysis/${analysis.id}`}
-                            className="inline-flex text-zinc-600 transition hover:text-white"
-                          >
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Link>
-
-                        </td>
-
-                      </tr>
-                    )
+                        </tr>
+                      );
+                    }
                   )}
 
                 </tbody>
@@ -386,84 +517,95 @@ export default function HistoryPage() {
 
             <div className="divide-y divide-zinc-800 md:hidden">
 
-              {analyses.map(
-                (analysis) => (
-                  <Link
-                    key={analysis.id}
-                    href={`/analysis/${analysis.id}`}
-                    className="block p-5 transition hover:bg-zinc-900/50"
-                  >
+              {paginatedAnalyses.map(
+                (analysis) => {
 
-                    <div className="flex items-start justify-between gap-4">
+                  const resumeName =
+                    analysis.resume
+                      ?.fileName ??
+                    "Resume";
 
-                      <div className="min-w-0">
+                  const jobTitle =
+                    analysis.job
+                      ?.title ??
+                    "Untitled Position";
 
-                        <p className="truncate text-sm font-medium text-zinc-200">
-                          {
-                            analysis
-                              .resume
-                              .fileName
-                          }
-                        </p>
+                  const company =
+                    analysis.job
+                      ?.company ??
+                    "Unknown Company";
 
-                        <p className="mt-1 text-xs text-zinc-600">
-                          {
-                            analysis
-                              .job
-                              .title
-                          }
+                  return (
+                    <Link
+                      key={analysis.id}
+                      href={`/analysis/${analysis.id}`}
+                      className="block p-5 transition hover:bg-zinc-900/50"
+                    >
 
-                          {" · "}
+                      <div className="flex items-start justify-between gap-4">
 
-                          {
-                            analysis
-                              .job
-                              .company
-                          }
-                        </p>
+                        <div className="min-w-0">
 
-                      </div>
+                          <p className="truncate text-sm font-medium text-zinc-200">
+                            {resumeName}
+                          </p>
 
-                      <ArrowUpRight className="h-4 w-4 shrink-0 text-zinc-600" />
+                          <p className="mt-1 text-xs text-zinc-600">
+                            {jobTitle}
+                            {" · "}
+                            {company}
+                          </p>
 
-                    </div>
+                        </div>
 
-                    <div className="mt-5 flex gap-8">
-
-                      <div>
-
-                        <p className="text-[10px] uppercase tracking-wider text-zinc-600">
-                          Match
-                        </p>
-
-                        <p className="mt-1 text-sm text-emerald-400">
-                          {
-                            analysis
-                              .matchScore
-                          }
-                          %
-                        </p>
+                        <ArrowUpRight className="h-4 w-4 shrink-0 text-zinc-600" />
 
                       </div>
 
-                      <div>
+                      <div className="mt-5 flex gap-8">
 
-                        <p className="text-[10px] uppercase tracking-wider text-zinc-600">
-                          Date
-                        </p>
+                        <div>
 
-                        <p className="mt-1 text-xs text-zinc-500">
-                          {new Date(
-                            analysis.createdAt
-                          ).toLocaleDateString()}
-                        </p>
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-600">
+                            Match
+                          </p>
+
+                          <p
+                            className={`mt-1 text-sm font-medium ${
+                              analysis.matchScore >=
+                              80
+                                ? "text-emerald-400"
+                                : analysis.matchScore >=
+                                  60
+                                ? "text-amber-400"
+                                : "text-red-400"
+                            }`}
+                          >
+                            {analysis.matchScore}
+                            %
+                          </p>
+
+                        </div>
+
+                        <div>
+
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-600">
+                            Date
+                          </p>
+
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {new Date(
+                              analysis.createdAt
+                            ).toLocaleDateString()}
+                          </p>
+
+                        </div>
 
                       </div>
 
-                    </div>
-
-                  </Link>
-                )
+                    </Link>
+                  );
+                }
               )}
 
             </div>
@@ -475,21 +617,28 @@ export default function HistoryPage() {
 
         {!loading &&
           totalPages > 1 && (
+
             <div className="mt-6 flex items-center justify-center gap-3">
 
               <button
+                type="button"
                 disabled={page <= 1}
                 onClick={() =>
                   setPage(
                     (value) =>
-                      value - 1
+                      Math.max(
+                        1,
+                        value - 1
+                      )
                   )
                 }
                 className="flex items-center gap-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
               >
+
                 <ChevronLeft className="h-4 w-4" />
 
                 Previous
+
               </button>
 
               <span className="text-xs text-zinc-600">
@@ -498,23 +647,30 @@ export default function HistoryPage() {
               </span>
 
               <button
+                type="button"
                 disabled={
                   page >= totalPages
                 }
                 onClick={() =>
                   setPage(
                     (value) =>
-                      value + 1
+                      Math.min(
+                        totalPages,
+                        value + 1
+                      )
                   )
                 }
                 className="flex items-center gap-1 rounded-lg border border-zinc-800 px-3 py-2 text-xs text-zinc-400 transition hover:bg-zinc-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
               >
+
                 Next
 
                 <ChevronRight className="h-4 w-4" />
+
               </button>
 
             </div>
+
           )}
 
       </div>

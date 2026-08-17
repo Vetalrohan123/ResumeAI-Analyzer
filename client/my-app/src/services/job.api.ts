@@ -13,6 +13,19 @@ import type {
 } from "@/types/job";
 
 /* ============================================================
+   PAYLOAD TYPES
+============================================================ */
+
+/**
+ * Backward-compatible names used by the job create/edit pages.
+ *
+ * These aliases prevent TypeScript errors while keeping the
+ * canonical types in src/types/job.ts.
+ */
+export type CreateJobPayload = CreateJobInput;
+export type UpdateJobPayload = UpdateJobInput;
+
+/* ============================================================
    RESPONSE TYPES
 ============================================================ */
 
@@ -90,9 +103,7 @@ export async function getJob(
   id: string
 ): Promise<Job> {
   if (!id?.trim()) {
-    throw new Error(
-      "Job ID is required."
-    );
+    throw new Error("Job ID is required.");
   }
 
   const response =
@@ -134,7 +145,7 @@ export async function getJob(
 ============================================================ */
 
 export async function createJob(
-  input: CreateJobInput
+  input: CreateJobPayload
 ): Promise<Job> {
   if (!input) {
     throw new Error(
@@ -177,7 +188,7 @@ export async function createJob(
 
 export async function updateJob(
   id: string,
-  input: UpdateJobInput
+  input: UpdateJobPayload
 ): Promise<Job> {
   if (!id?.trim()) {
     throw new Error(
@@ -246,12 +257,9 @@ export async function updateJobStatus(
     );
   }
 
-  return updateJob(
-    id,
-    {
-      status,
-    }
-  );
+  return updateJob(id, {
+    status,
+  });
 }
 
 /* ============================================================
