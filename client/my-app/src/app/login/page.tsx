@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import {
-  useRouter,
   useSearchParams,
 } from "next/navigation";
 
@@ -27,7 +26,6 @@ import { authApi } from "@/lib/api";
 ============================================================ */
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [showPassword, setShowPassword] =
@@ -62,6 +60,10 @@ function LoginForm() {
     setLoading(true);
 
     try {
+      /* ------------------------------------------------------
+         VALIDATION
+      ------------------------------------------------------ */
+
       const cleanEmail =
         email.trim().toLowerCase();
 
@@ -87,10 +89,9 @@ function LoginForm() {
         "[LOGIN] Starting login..."
       );
 
-      /*
-       * authApi.login() should set the
-       * HTTP-only authentication cookie.
-       */
+      /* ------------------------------------------------------
+         LOGIN
+      ------------------------------------------------------ */
 
       const response =
         await authApi.login(
@@ -114,9 +115,9 @@ function LoginForm() {
         "[LOGIN] Login successful."
       );
 
-      /*
-       * Verify the authentication session.
-       */
+      /* ------------------------------------------------------
+         VERIFY SESSION
+      ------------------------------------------------------ */
 
       console.log(
         "[LOGIN] Verifying authentication session..."
@@ -144,12 +145,9 @@ function LoginForm() {
         me.user
       );
 
-      /*
-       * Read redirect query parameter.
-       *
-       * Example:
-       * /login?redirect=/dashboard/jobs
-       */
+      /* ------------------------------------------------------
+         REDIRECT
+      ------------------------------------------------------ */
 
       const redirect =
         searchParams.get(
@@ -157,10 +155,7 @@ function LoginForm() {
         );
 
       /*
-       * Only allow internal paths.
-       *
-       * This prevents redirects such as:
-       * https://malicious-site.com
+       * Only allow internal application paths.
        */
 
       const safeRedirect =
@@ -177,11 +172,24 @@ function LoginForm() {
         safeRedirect
       );
 
-      router.replace(
-        safeRedirect
-      );
+      /*
+       * IMPORTANT:
+       *
+       * Do NOT use:
+       *
+       * router.replace()
+       * router.refresh()
+       *
+       * here.
+       *
+       * window.location.href forces the browser to make
+       * a completely new request with the authentication
+       * cookie available.
+       */
 
-      router.refresh();
+      window.location.href =
+        safeRedirect;
+
     } catch (err) {
       console.error(
         "[LOGIN] Login failed:",
@@ -199,7 +207,7 @@ function LoginForm() {
           "Unable to sign in. Please try again."
         );
       }
-    } finally {
+
       setLoading(false);
     }
   };
@@ -258,18 +266,9 @@ function LoginForm() {
               <div className="mt-10 grid grid-cols-3 gap-3">
 
                 {[
-                  [
-                    "92",
-                    "Avg. ATS score",
-                  ],
-                  [
-                    "94%",
-                    "Match accuracy",
-                  ],
-                  [
-                    "10k+",
-                    "Resumes analyzed",
-                  ],
+                  ["92", "Avg. ATS score"],
+                  ["94%", "Match accuracy"],
+                  ["10k+", "Resumes analyzed"],
                 ].map(
                   ([value, label]) => (
                     <div
@@ -553,6 +552,7 @@ function LoginForm() {
           </div>
 
         </section>
+
       </div>
     </main>
   );
@@ -560,7 +560,6 @@ function LoginForm() {
 
 /* ============================================================
    PAGE
-   Suspense is required because LoginForm uses useSearchParams()
 ============================================================ */
 
 export default function LoginPage() {
@@ -568,13 +567,17 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <main className="flex min-h-screen items-center justify-center bg-[#080808] text-white">
+
           <div className="flex flex-col items-center gap-4">
+
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
 
             <p className="text-sm text-zinc-500">
               Loading...
             </p>
+
           </div>
+
         </main>
       }
     >
