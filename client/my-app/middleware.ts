@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/* ============================================================
+   ROUTE CONFIG
+============================================================ */
+
 const PROTECTED_ROUTES = [
   "/dashboard",
 ];
@@ -7,126 +11,99 @@ const PROTECTED_ROUTES = [
 const AUTH_ROUTES = [
   "/login",
   "/signup",
+  "/register",
 ];
 
-function isProtectedRoute(
-  pathname: string
-): boolean {
+const AUTH_COOKIE_NAME = "accessToken";
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function isProtectedRoute(pathname: string): boolean {
   return PROTECTED_ROUTES.some(
     (route) =>
       pathname === route ||
-      pathname.startsWith(
-        `${route}/`
-      )
+      pathname.startsWith(`${route}/`)
   );
 }
 
-/* ============================================================
-   CHECK AUTH ROUTE
-============================================================ */
-
-function isAuthRoute(
-  pathname: string
-): boolean {
+function isAuthRoute(pathname: string): boolean {
   return AUTH_ROUTES.some(
     (route) =>
       pathname === route ||
-      pathname.startsWith(
-        `${route}/`
-      )
+      pathname.startsWith(`${route}/`)
   );
+}
+
+function getIsAuthenticated(
+  request: NextRequest
+): boolean {
+  const token = request.cookies.get(
+    AUTH_COOKIE_NAME
+  )?.value;
+
+  return Boolean(token && token.trim());
 }
 
 /* ============================================================
    MIDDLEWARE
 ============================================================ */
 
-export function middleware(
-  request: NextRequest
-) {
-  const { pathname } =
-    request.nextUrl;
-
-  /* ==========================================================
-     ACCESS TOKEN COOKIE
-  ========================================================== */
-
-  const accessToken =
-    request.cookies.get(
-      "accessToken"
-    )?.value;
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
   const isAuthenticated =
-    Boolean(
-      accessToken &&
-        accessToken.trim()
+    getIsAuthenticated(request);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      "[MIDDLEWARE]",
+      pathname,
+      "authenticated:",
+      isAuthenticated
     );
-
-  /* ==========================================================
-     DEBUG
-  ========================================================== */
-
-  console.log(
-    "[MIDDLEWARE]",
-    pathname,
-    "authenticated:",
-    isAuthenticated
-  );
+  }
 
   /* ==========================================================
      PROTECTED DASHBOARD ROUTES
   ========================================================== */
 
-  if (
-    isProtectedRoute(pathname)
-  ) {
+  if (isProtectedRoute(pathname)) {
     if (!isAuthenticated) {
-      const loginUrl =
-        new URL(
-          "/login",
-          request.url
-        );
+      const loginUrl = new URL(
+        "/login",
+        request.url
+      );
 
-      /*
-       * Example:
-       *
-       * /dashboard/jobs
-       *
-       * becomes:
-       *
-       * /login?redirect=%2Fdashboard%2Fjobs
-       */
-
+      // e.g. /dashboard/jobs -> /login?redirect=%2Fdashboard%2Fjobs
       loginUrl.searchParams.set(
         "redirect",
         pathname
       );
 
-      return NextResponse.redirect(
-        loginUrl
-      );
+      return NextResponse.redirect(loginUrl);
     }
+
+    return NextResponse.next();
   }
 
   /* ==========================================================
-     LOGIN / SIGNUP
+     LOGIN / SIGNUP / REGISTER
   ========================================================== */
 
-  if (
-    isAuthRoute(pathname)
-  ) {
+  if (isAuthRoute(pathname)) {
     if (isAuthenticated) {
       return NextResponse.redirect(
-        new URL(
-          "/dashboard",
-          request.url
-        )
+        new URL("/dashboard", request.url)
       );
     }
+
+    return NextResponse.next();
   }
 
   /* ==========================================================
-     ALLOW REQUEST
+     DEFAULT
   ========================================================== */
 
   return NextResponse.next();
@@ -141,5 +118,6 @@ export const config = {
     "/dashboard/:path*",
     "/login",
     "/signup",
+    "/register",
   ],
 };
