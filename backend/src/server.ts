@@ -41,8 +41,7 @@ const app = express();
 ============================================================================ */
 
 const NODE_ENV =
-  process.env.NODE_ENV ||
-  "development";
+  process.env.NODE_ENV || "development";
 
 const isProduction =
   NODE_ENV === "production";
@@ -57,6 +56,22 @@ const PORT =
 /* ============================================================================
    CLIENT URL
 ============================================================================ */
+
+/*
+ * IMPORTANT:
+ *
+ * On Render set:
+ *
+ * CLIENT_URL=https://resumeai-app.onrender.com
+ *
+ * Do NOT put /api here.
+ *
+ * Correct:
+ * https://resumeai-app.onrender.com
+ *
+ * Wrong:
+ * https://resumeai-app.onrender.com/api
+ */
 
 const CLIENT_URL =
   process.env.CLIENT_URL ||
@@ -94,29 +109,17 @@ console.log(
 );
 
 console.log(
+  "🍪 Production cookies:",
+  isProduction
+);
+
+console.log(
   "================================================"
 );
 
 /* ============================================================================
    TRUST PROXY
 ============================================================================ */
-
-/*
- * Required when deployed behind:
- *
- * - Render
- * - Railway
- * - Nginx
- * - AWS Load Balancer
- * - Cloudflare
- *
- * Important for:
- *
- * - HTTPS
- * - secure cookies
- * - rate limiting
- * - req.ip
- */
 
 if (isProduction) {
   app.set(
@@ -139,6 +142,11 @@ app.use(
       `[API] ${req.method} ${req.originalUrl}`
     );
 
+    console.log(
+      "[API] Origin:",
+      req.headers.origin
+    );
+
     next();
   }
 );
@@ -154,6 +162,13 @@ app.use(
 /* ============================================================================
    CORS
 ============================================================================ */
+
+/*
+ * The frontend and backend are on different origins.
+ *
+ * credentials: true is REQUIRED because we use
+ * HTTP-only authentication cookies.
+ */
 
 app.use(
   cors({
@@ -175,6 +190,10 @@ app.use(
       "Authorization",
       "Accept",
     ],
+
+    exposedHeaders: [
+      "Set-Cookie",
+    ],
   })
 );
 
@@ -188,10 +207,6 @@ app.use(
       policy: "cross-origin",
     },
 
-    /*
-     * Disabled because the frontend/API
-     * may need to load resources across origins.
-     */
     crossOriginEmbedderPolicy: false,
 
     referrerPolicy: {
@@ -202,7 +217,7 @@ app.use(
 );
 
 /* ============================================================================
-   GLOBAL RATE LIMITER
+   RATE LIMITER
 ============================================================================ */
 
 app.use(
@@ -210,7 +225,7 @@ app.use(
 );
 
 /* ============================================================================
-   HTTP REQUEST LOGGER
+   HTTP LOGGER
 ============================================================================ */
 
 if (isProduction) {
@@ -226,13 +241,6 @@ if (isProduction) {
 /* ============================================================================
    BODY PARSER
 ============================================================================ */
-
-/*
- * These limits apply to JSON/urlencoded requests.
- *
- * Resume uploads use Multer and therefore
- * are not affected by these limits.
- */
 
 app.use(
   express.json({
@@ -369,26 +377,45 @@ app.use(
   jobMatchingRoutes
 );
 
+/* ============================================================================
+   RESUME BUILDER
+============================================================================ */
+
 app.use(
   "/api/resume-builder",
   resumeBuilderRoutes
 );
+
+/* ============================================================================
+   RESUME BUILDER AI
+============================================================================ */
 
 app.use(
   "/api/resume-builder/ai",
   resumeBuilderAIRoutes
 );
 
+/* ============================================================================
+   TEST ROUTE
+============================================================================ */
 
 app.get(
   "/api/test-route",
-  (_req, res) => {
-    return res.json({
+  (
+    _req: Request,
+    res: Response
+  ) => {
+    return res.status(200).json({
       success: true,
-      message: "Test route works",
+      message:
+        "Test route works",
     });
   }
-); 
+);
+
+/* ============================================================================
+   404 HANDLER
+============================================================================ */
 
 app.use(
   (
@@ -415,17 +442,6 @@ app.use(
    GLOBAL ERROR HANDLER
 ============================================================================ */
 
-/*
- * IMPORTANT:
- *
- * This MUST be the final middleware.
- *
- * It must come after:
- *
- * - all routes
- * - 404 handler
- */
-
 app.use(
   errorMiddleware
 );
@@ -443,51 +459,51 @@ const server =
       );
 
       console.log(
-        `🚀 Server running on http://localhost:${PORT}`
+        `🚀 Server running on port ${PORT}`
       );
 
       console.log(
-        `📡 API: http://localhost:${PORT}/api`
+        `📡 API: /api`
       );
 
       console.log(
-        `❤️ Health: http://localhost:${PORT}/`
+        `❤️ Health: /`
       );
 
       console.log(
-        `❤️ API Health: http://localhost:${PORT}/api/health`
+        `❤️ API Health: /api/health`
       );
 
       console.log(
-        `🔐 Auth API: http://localhost:${PORT}/api/auth`
+        `🔐 Auth API: /api/auth`
       );
 
       console.log(
-        `📄 Resume API: http://localhost:${PORT}/api/resumes`
+        `📄 Resume API: /api/resumes`
       );
 
       console.log(
-        `💼 Job API: http://localhost:${PORT}/api/jobs`
+        `💼 Job API: /api/jobs`
       );
 
       console.log(
-        `🎯 Match API: http://localhost:${PORT}/api/matches`
+        `🎯 Match API: /api/matches`
       );
 
       console.log(
-        `📊 Dashboard API: http://localhost:${PORT}/api/dashboard`
+        `📊 Dashboard API: /api/dashboard`
       );
 
       console.log(
-        `👑 Admin API: http://localhost:${PORT}/api/admin`
+        `👑 Admin API: /api/admin`
       );
 
       console.log(
-        `📊 Analysis API: http://localhost:${PORT}/api/analysis`
+        `📊 Analysis API: /api/analysis`
       );
 
       console.log(
-        `🤖 Job Matching API: http://localhost:${PORT}/api/job-matching`
+        `🤖 Job Matching API: /api/job-matching`
       );
 
       console.log(
@@ -517,10 +533,6 @@ const shutdown = (
     `\n🛑 ${signal} received. Shutting down server...`
   );
 
-  /*
-   * Stop accepting new connections.
-   */
-
   server.close(
     (error) => {
       if (error) {
@@ -539,10 +551,6 @@ const shutdown = (
       process.exit(0);
     }
   );
-
-  /*
-   * Force shutdown after 10 seconds.
-   */
 
   setTimeout(
     () => {
@@ -583,7 +591,7 @@ process.on(
 );
 
 /* ============================================================================
-   UNHANDLED PROMISE REJECTION
+   UNHANDLED REJECTION
 ============================================================================ */
 
 process.on(
@@ -593,12 +601,6 @@ process.on(
       "❌ Unhandled Promise Rejection:",
       reason
     );
-
-    /*
-     * The process manager/container
-     * should restart the application
-     * if this becomes a fatal condition.
-     */
   }
 );
 
@@ -621,4 +623,3 @@ process.on(
 );
 
 export default app;
-

@@ -6,18 +6,10 @@ import type {
 
 import { AuthService } from "../services/auth.service.js";
 
-/* ==========================================================================
-   ENVIRONMENT
-   ========================================================================== */
-
 const isProduction =
   process.env.NODE_ENV === "production";
 
-/* ==========================================================================
-   COOKIE OPTIONS
-   ========================================================================== */
-
-const accessTokenCookieOptions = {
+const cookieOptions = {
   httpOnly: true,
 
   secure: isProduction,
@@ -26,35 +18,23 @@ const accessTokenCookieOptions = {
     ? ("none" as const)
     : ("lax" as const),
 
-  maxAge: 15 * 60 * 1000,
-
   path: "/",
+};
+
+const accessTokenCookieOptions = {
+  ...cookieOptions,
+
+  maxAge: 15 * 60 * 1000,
 };
 
 const refreshTokenCookieOptions = {
-  httpOnly: true,
-
-  secure: isProduction,
-
-  sameSite: isProduction
-    ? ("none" as const)
-    : ("lax" as const),
+  ...cookieOptions,
 
   maxAge:
     7 * 24 * 60 * 60 * 1000,
-
-  path: "/",
 };
 
-/* ==========================================================================
-   AUTH CONTROLLER
-   ========================================================================== */
-
 export class AuthController {
-
-  /* ==========================================================================
-     REGISTER
-     ========================================================================== */
 
   static async register(
     req: Request,
@@ -87,15 +67,11 @@ export class AuthController {
         });
       }
 
-      /* Set access token */
-
       res.cookie(
         "accessToken",
         result.accessToken,
         accessTokenCookieOptions
       );
-
-      /* Set refresh token */
 
       res.cookie(
         "refreshToken",
@@ -113,11 +89,11 @@ export class AuthController {
         message:
           "Account created successfully.",
 
-        user: result.user,
+        user:
+          result.user,
       });
 
     } catch (error) {
-
       console.error(
         "[AUTH] Registration error:",
         error
@@ -127,17 +103,12 @@ export class AuthController {
     }
   }
 
-  /* ==========================================================================
-     LOGIN
-     ========================================================================== */
-
   static async login(
     req: Request,
     res: Response,
     next: NextFunction
   ) {
     try {
-
       console.log(
         "[AUTH] Login started"
       );
@@ -152,16 +123,7 @@ export class AuthController {
           req.body
         );
 
-      /* ----------------------------------------------------------------------
-         Verify access token
-         ---------------------------------------------------------------------- */
-
       if (!result.accessToken) {
-
-        console.error(
-          "[AUTH] No access token returned"
-        );
-
         return res.status(500).json({
           success: false,
           message:
@@ -169,16 +131,7 @@ export class AuthController {
         });
       }
 
-      /* ----------------------------------------------------------------------
-         Verify refresh token
-         ---------------------------------------------------------------------- */
-
       if (!result.refreshToken) {
-
-        console.error(
-          "[AUTH] No refresh token returned"
-        );
-
         return res.status(500).json({
           success: false,
           message:
@@ -186,9 +139,9 @@ export class AuthController {
         });
       }
 
-      /* ----------------------------------------------------------------------
-         Set access token cookie
-         ---------------------------------------------------------------------- */
+      /*
+       * HTTP-only access token
+       */
 
       res.cookie(
         "accessToken",
@@ -196,13 +149,9 @@ export class AuthController {
         accessTokenCookieOptions
       );
 
-      console.log(
-        "[AUTH] accessToken cookie set"
-      );
-
-      /* ----------------------------------------------------------------------
-         Set refresh token cookie
-         ---------------------------------------------------------------------- */
+      /*
+       * HTTP-only refresh token
+       */
 
       res.cookie(
         "refreshToken",
@@ -211,12 +160,20 @@ export class AuthController {
       );
 
       console.log(
-        "[AUTH] refreshToken cookie set"
+        "[AUTH] Cookies set successfully"
       );
 
       console.log(
         "[AUTH] Login successful"
       );
+
+      /*
+       * IMPORTANT:
+       *
+       * We don't need to send the tokens
+       * in JSON because they're already
+       * stored in HTTP-only cookies.
+       */
 
       return res.status(200).json({
         success: true,
@@ -224,15 +181,11 @@ export class AuthController {
         message:
           "Login successful.",
 
-        user: result.user,
-
-        accessToken: result.accessToken,
-
-        refreshToken: result.refreshToken,
+        user:
+          result.user,
       });
 
     } catch (error) {
-
       console.error(
         "[AUTH] Login error:",
         error
@@ -242,17 +195,19 @@ export class AuthController {
     }
   }
 
-  /* ==========================================================================
-     GET CURRENT USER
-     ========================================================================== */
-
   static async me(
     req: Request,
     res: Response
   ) {
-
     console.log(
       "[AUTH] GET /me"
+    );
+
+    console.log(
+      "[AUTH] Cookies:",
+      Object.keys(
+        req.cookies || {}
+      )
     );
 
     console.log(
@@ -261,7 +216,6 @@ export class AuthController {
     );
 
     if (!req.user) {
-
       return res.status(401).json({
         success: false,
 
@@ -271,71 +225,39 @@ export class AuthController {
     }
 
     return res.status(200).json({
-
       success: true,
 
       message:
         "Authenticated user fetched successfully.",
 
-      user: req.user,
-
+      user:
+        req.user,
     });
   }
-
-  /* ==========================================================================
-     LOGOUT
-     ========================================================================== */
 
   static async logout(
     _req: Request,
     res: Response
   ) {
-
     console.log(
       "[AUTH] Logout started"
     );
 
     res.clearCookie(
       "accessToken",
-      {
-        httpOnly: true,
-        secure: isProduction,
-
-        sameSite:
-          isProduction
-            ? ("none" as const)
-            : ("lax" as const),
-
-        path: "/",
-      }
+      cookieOptions
     );
 
     res.clearCookie(
       "refreshToken",
-      {
-        httpOnly: true,
-        secure: isProduction,
-
-        sameSite:
-          isProduction
-            ? ("none" as const)
-            : ("lax" as const),
-
-        path: "/",
-      }
-    );
-
-    console.log(
-      "[AUTH] Authentication cookies cleared"
+      cookieOptions
     );
 
     return res.status(200).json({
-
       success: true,
 
       message:
         "Logged out successfully.",
-
     });
   }
 }
