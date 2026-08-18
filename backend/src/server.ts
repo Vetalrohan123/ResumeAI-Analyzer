@@ -1,7 +1,6 @@
 import "dotenv/config";
 
 import express from "express";
-
 import type {
   Request,
   Response,
@@ -31,17 +30,11 @@ import {
 } from "./middleware/security.middleware.js";
 
 /* ============================================================================
-   APP
-============================================================================ */
-
-const app = express();
-
-/* ============================================================================
    ENVIRONMENT
 ============================================================================ */
 
 const NODE_ENV =
-  process.env.NODE_ENV || "development";
+  process.env.NODE_ENV ?? "development";
 
 const isProduction =
   NODE_ENV === "production";
@@ -57,25 +50,15 @@ const PORT =
    CLIENT URL
 ============================================================================ */
 
-/*
- * IMPORTANT:
- *
- * On Render set:
- *
- * CLIENT_URL=https://resumeai-app.onrender.com
- *
- * Do NOT put /api here.
- *
- * Correct:
- * https://resumeai-app.onrender.com
- *
- * Wrong:
- * https://resumeai-app.onrender.com/api
- */
-
 const CLIENT_URL =
-  process.env.CLIENT_URL ||
+  process.env.CLIENT_URL ??
   "http://localhost:3000";
+
+/* ============================================================================
+   APP
+============================================================================ */
+
+const app = express();
 
 /* ============================================================================
    STARTUP LOG
@@ -104,13 +87,8 @@ console.log(
 );
 
 console.log(
-  "🚀 API Port:",
+  "🚀 Port:",
   PORT
-);
-
-console.log(
-  "🍪 Production cookies:",
-  isProduction
 );
 
 console.log(
@@ -142,11 +120,6 @@ app.use(
       `[API] ${req.method} ${req.originalUrl}`
     );
 
-    console.log(
-      "[API] Origin:",
-      req.headers.origin
-    );
-
     next();
   }
 );
@@ -164,10 +137,15 @@ app.use(
 ============================================================================ */
 
 /*
- * The frontend and backend are on different origins.
+ * IMPORTANT:
  *
- * credentials: true is REQUIRED because we use
- * HTTP-only authentication cookies.
+ * CLIENT_URL must be the exact frontend origin.
+ *
+ * Example:
+ *
+ * CLIENT_URL=https://your-frontend.onrender.com
+ *
+ * Do NOT put / at the end.
  */
 
 app.use(
@@ -189,10 +167,7 @@ app.use(
       "Content-Type",
       "Authorization",
       "Accept",
-    ],
-
-    exposedHeaders: [
-      "Set-Cookie",
+      "X-Requested-With",
     ],
   })
 );
@@ -228,15 +203,13 @@ app.use(
    HTTP LOGGER
 ============================================================================ */
 
-if (isProduction) {
-  app.use(
-    morgan("combined")
-  );
-} else {
-  app.use(
-    morgan("dev")
-  );
-}
+app.use(
+  morgan(
+    isProduction
+      ? "combined"
+      : "dev"
+  )
+);
 
 /* ============================================================================
    BODY PARSER
@@ -298,6 +271,48 @@ app.get(
 
       environment:
         NODE_ENV,
+
+      timestamp:
+        new Date().toISOString(),
+    });
+  }
+);
+
+/* ============================================================================
+   API ROOT
+============================================================================ */
+
+app.get(
+  "/api",
+  (
+    _req: Request,
+    res: Response
+  ) => {
+    return res.status(200).json({
+      success: true,
+
+      message:
+        "AI Resume Analyzer API",
+
+      version: "1.0.0",
+
+      environment:
+        NODE_ENV,
+
+      endpoints: {
+        auth: "/api/auth",
+        resumes: "/api/resumes",
+        jobs: "/api/jobs",
+        matches: "/api/matches",
+        dashboard: "/api/dashboard",
+        admin: "/api/admin",
+        analysis: "/api/analysis",
+        jobMatching: "/api/job-matching",
+        resumeBuilder:
+          "/api/resume-builder",
+        resumeBuilderAI:
+          "/api/resume-builder/ai",
+      },
 
       timestamp:
         new Date().toISOString(),
@@ -378,7 +393,7 @@ app.use(
 );
 
 /* ============================================================================
-   RESUME BUILDER
+   RESUME BUILDER ROUTES
 ============================================================================ */
 
 app.use(
@@ -387,7 +402,7 @@ app.use(
 );
 
 /* ============================================================================
-   RESUME BUILDER AI
+   RESUME BUILDER AI ROUTES
 ============================================================================ */
 
 app.use(
@@ -407,8 +422,12 @@ app.get(
   ) => {
     return res.status(200).json({
       success: true,
+
       message:
         "Test route works",
+
+      timestamp:
+        new Date().toISOString(),
     });
   }
 );
@@ -467,43 +486,47 @@ const server =
       );
 
       console.log(
-        `❤️ Health: /`
+        `❤️ Health: /api/health`
       );
 
       console.log(
-        `❤️ API Health: /api/health`
+        `🔐 Auth: /api/auth`
       );
 
       console.log(
-        `🔐 Auth API: /api/auth`
+        `📄 Resumes: /api/resumes`
       );
 
       console.log(
-        `📄 Resume API: /api/resumes`
+        `💼 Jobs: /api/jobs`
       );
 
       console.log(
-        `💼 Job API: /api/jobs`
+        `🎯 Matches: /api/matches`
       );
 
       console.log(
-        `🎯 Match API: /api/matches`
+        `📊 Dashboard: /api/dashboard`
       );
 
       console.log(
-        `📊 Dashboard API: /api/dashboard`
+        `👑 Admin: /api/admin`
       );
 
       console.log(
-        `👑 Admin API: /api/admin`
+        `📊 Analysis: /api/analysis`
       );
 
       console.log(
-        `📊 Analysis API: /api/analysis`
+        `🤖 Job Matching: /api/job-matching`
       );
 
       console.log(
-        `🤖 Job Matching API: /api/job-matching`
+        `📝 Resume Builder: /api/resume-builder`
+      );
+
+      console.log(
+        `🤖 Resume Builder AI: /api/resume-builder/ai`
       );
 
       console.log(
@@ -521,7 +544,7 @@ let isShuttingDown =
 
 const shutdown = (
   signal: string
-) => {
+): void => {
   if (isShuttingDown) {
     return;
   }
@@ -530,14 +553,16 @@ const shutdown = (
     true;
 
   console.log(
-    `\n🛑 ${signal} received. Shutting down server...`
+    `\n🛑 ${signal} received. Shutting down...`
   );
 
   server.close(
-    (error) => {
+    (
+      error?: Error
+    ) => {
       if (error) {
         console.error(
-          "❌ Error while closing HTTP server:",
+          "❌ Error closing server:",
           error
         );
 
@@ -555,7 +580,7 @@ const shutdown = (
   setTimeout(
     () => {
       console.error(
-        "⚠️ Forced shutdown after timeout."
+        "⚠️ Forced shutdown after 10 seconds."
       );
 
       process.exit(1);
@@ -571,9 +596,7 @@ const shutdown = (
 process.on(
   "SIGTERM",
   () => {
-    shutdown(
-      "SIGTERM"
-    );
+    shutdown("SIGTERM");
   }
 );
 
@@ -584,9 +607,7 @@ process.on(
 process.on(
   "SIGINT",
   () => {
-    shutdown(
-      "SIGINT"
-    );
+    shutdown("SIGINT");
   }
 );
 
@@ -596,7 +617,7 @@ process.on(
 
 process.on(
   "unhandledRejection",
-  (reason) => {
+  (reason: unknown) => {
     console.error(
       "❌ Unhandled Promise Rejection:",
       reason
@@ -610,7 +631,7 @@ process.on(
 
 process.on(
   "uncaughtException",
-  (error) => {
+  (error: Error) => {
     console.error(
       "❌ Uncaught Exception:",
       error
@@ -621,5 +642,9 @@ process.on(
     );
   }
 );
+
+/* ============================================================================
+   EXPORT
+============================================================================ */
 
 export default app;

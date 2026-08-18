@@ -6,10 +6,38 @@ import type {
 
 import { AuthService } from "../services/auth.service.js";
 
+/* ============================================================================
+   ENVIRONMENT
+============================================================================ */
+
 const isProduction =
   process.env.NODE_ENV === "production";
 
-const cookieOptions = {
+/* ============================================================================
+   COOKIE OPTIONS
+============================================================================ */
+
+/*
+ * Production:
+ *
+ * Frontend:
+ *   https://your-frontend-domain.com
+ *
+ * Backend:
+ *   https://your-backend.onrender.com
+ *
+ * Because these are different origins, the browser needs:
+ *
+ *   secure: true
+ *   sameSite: "none"
+ *
+ * Development:
+ *
+ *   secure: false
+ *   sameSite: "lax"
+ */
+
+const accessTokenCookieOptions = {
   httpOnly: true,
 
   secure: isProduction,
@@ -18,23 +46,35 @@ const cookieOptions = {
     ? ("none" as const)
     : ("lax" as const),
 
+  maxAge:
+    15 * 60 * 1000,
+
   path: "/",
 };
 
-const accessTokenCookieOptions = {
-  ...cookieOptions,
-
-  maxAge: 15 * 60 * 1000,
-};
-
 const refreshTokenCookieOptions = {
-  ...cookieOptions,
+  httpOnly: true,
+
+  secure: isProduction,
+
+  sameSite: isProduction
+    ? ("none" as const)
+    : ("lax" as const),
 
   maxAge:
     7 * 24 * 60 * 60 * 1000,
+
+  path: "/",
 };
 
+/* ============================================================================
+   AUTH CONTROLLER
+============================================================================ */
+
 export class AuthController {
+  /* ==========================================================================
+     REGISTER
+  ========================================================================== */
 
   static async register(
     req: Request,
@@ -46,12 +86,58 @@ export class AuthController {
         "[AUTH] Registration started"
       );
 
+      console.log(
+        "[AUTH] Email:",
+        req.body?.email
+      );
+
+      /* ----------------------------------------------------------------------
+         Validate request body
+      ---------------------------------------------------------------------- */
+
+      const email =
+        req.body?.email
+          ?.trim()
+          ?.toLowerCase();
+
+      const password =
+        req.body?.password;
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Email is required.",
+        });
+      }
+
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Password is required.",
+        });
+      }
+
+      /* ----------------------------------------------------------------------
+         Register user
+      ---------------------------------------------------------------------- */
+
       const result =
-        await AuthService.register(
-          req.body
-        );
+        await AuthService.register({
+          ...req.body,
+          email,
+        });
+
+      /* ----------------------------------------------------------------------
+         Validate access token
+      ---------------------------------------------------------------------- */
 
       if (!result.accessToken) {
+        console.error(
+          "[AUTH] No access token returned during registration"
+        );
+
         return res.status(500).json({
           success: false,
           message:
@@ -59,7 +145,15 @@ export class AuthController {
         });
       }
 
+      /* ----------------------------------------------------------------------
+         Validate refresh token
+      ---------------------------------------------------------------------- */
+
       if (!result.refreshToken) {
+        console.error(
+          "[AUTH] No refresh token returned during registration"
+        );
+
         return res.status(500).json({
           success: false,
           message:
@@ -67,17 +161,37 @@ export class AuthController {
         });
       }
 
+      /* ----------------------------------------------------------------------
+         Set access token cookie
+      ---------------------------------------------------------------------- */
+
       res.cookie(
         "accessToken",
         result.accessToken,
         accessTokenCookieOptions
       );
 
+      console.log(
+        "[AUTH] accessToken cookie set"
+      );
+
+      /* ----------------------------------------------------------------------
+         Set refresh token cookie
+      ---------------------------------------------------------------------- */
+
       res.cookie(
         "refreshToken",
         result.refreshToken,
         refreshTokenCookieOptions
       );
+
+      console.log(
+        "[AUTH] refreshToken cookie set"
+      );
+
+      /* ----------------------------------------------------------------------
+         Registration successful
+      ---------------------------------------------------------------------- */
 
       console.log(
         "[AUTH] Registration successful"
@@ -89,11 +203,9 @@ export class AuthController {
         message:
           "Account created successfully.",
 
-        user:
-          result.user,
+        user: result.user,
       });
-
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         "[AUTH] Registration error:",
         error
@@ -102,6 +214,10 @@ export class AuthController {
       return next(error);
     }
   }
+
+  /* ==========================================================================
+     LOGIN
+  ========================================================================== */
 
   static async login(
     req: Request,
@@ -118,30 +234,98 @@ export class AuthController {
         req.body?.email
       );
 
-      const result =
-        await AuthService.login(
-          req.body
+      /* ----------------------------------------------------------------------
+         Validate email
+      ---------------------------------------------------------------------- */
+
+      const email =
+        req.body?.email
+          ?.trim()
+          ?.toLowerCase();
+
+      /* ----------------------------------------------------------------------
+         Validate password
+      ---------------------------------------------------------------------- */
+
+      const password =
+        req.body?.password;
+
+      if (!email) {
+        console.warn(
+          "[AUTH] Login rejected: email missing"
         );
 
+        return res.status(400).json({
+          success: false,
+
+          message:
+            "Email is required.",
+        });
+      }
+
+      if (!password) {
+        console.warn(
+          "[AUTH] Login rejected: password missing"
+        );
+
+        return res.status(400).json({
+          success: false,
+
+          message:
+            "Password is required.",
+        });
+      }
+
+      /* ----------------------------------------------------------------------
+         Login through AuthService
+      ---------------------------------------------------------------------- */
+
+      const result =
+        await AuthService.login({
+          ...req.body,
+
+          email,
+
+          password,
+        });
+
+      /* ----------------------------------------------------------------------
+         Validate access token
+      ---------------------------------------------------------------------- */
+
       if (!result.accessToken) {
+        console.error(
+          "[AUTH] No access token returned"
+        );
+
         return res.status(500).json({
           success: false,
+
           message:
             "Access token was not generated.",
         });
       }
 
+      /* ----------------------------------------------------------------------
+         Validate refresh token
+      ---------------------------------------------------------------------- */
+
       if (!result.refreshToken) {
+        console.error(
+          "[AUTH] No refresh token returned"
+        );
+
         return res.status(500).json({
           success: false,
+
           message:
             "Refresh token was not generated.",
         });
       }
 
-      /*
-       * HTTP-only access token
-       */
+      /* ----------------------------------------------------------------------
+         Set access token cookie
+      ---------------------------------------------------------------------- */
 
       res.cookie(
         "accessToken",
@@ -149,9 +333,13 @@ export class AuthController {
         accessTokenCookieOptions
       );
 
-      /*
-       * HTTP-only refresh token
-       */
+      console.log(
+        "[AUTH] accessToken cookie set"
+      );
+
+      /* ----------------------------------------------------------------------
+         Set refresh token cookie
+      ---------------------------------------------------------------------- */
 
       res.cookie(
         "refreshToken",
@@ -160,8 +348,12 @@ export class AuthController {
       );
 
       console.log(
-        "[AUTH] Cookies set successfully"
+        "[AUTH] refreshToken cookie set"
       );
+
+      /* ----------------------------------------------------------------------
+         Login successful
+      ---------------------------------------------------------------------- */
 
       console.log(
         "[AUTH] Login successful"
@@ -170,9 +362,10 @@ export class AuthController {
       /*
        * IMPORTANT:
        *
-       * We don't need to send the tokens
-       * in JSON because they're already
-       * stored in HTTP-only cookies.
+       * Do NOT return accessToken or refreshToken
+       * in JSON.
+       *
+       * They are stored in HTTP-only cookies.
        */
 
       return res.status(200).json({
@@ -181,11 +374,9 @@ export class AuthController {
         message:
           "Login successful.",
 
-        user:
-          result.user,
+        user: result.user,
       });
-
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         "[AUTH] Login error:",
         error
@@ -195,69 +386,147 @@ export class AuthController {
     }
   }
 
+  /* ==========================================================================
+     GET CURRENT USER
+  ========================================================================== */
+
   static async me(
     req: Request,
     res: Response
   ) {
-    console.log(
-      "[AUTH] GET /me"
-    );
+    try {
+      console.log(
+        "[AUTH] GET /me"
+      );
 
-    console.log(
-      "[AUTH] Cookies:",
-      Object.keys(
-        req.cookies || {}
-      )
-    );
+      console.log(
+        "[AUTH] req.user:",
+        req.user
+      );
 
-    console.log(
-      "[AUTH] req.user:",
-      req.user
-    );
+      /* ----------------------------------------------------------------------
+         Authentication middleware should populate req.user.
+      ---------------------------------------------------------------------- */
 
-    if (!req.user) {
-      return res.status(401).json({
+      if (!req.user) {
+        console.warn(
+          "[AUTH] /me called without authenticated user"
+        );
+
+        return res.status(401).json({
+          success: false,
+
+          message:
+            "Authentication required.",
+        });
+      }
+
+      /* ----------------------------------------------------------------------
+         Return authenticated user
+      ---------------------------------------------------------------------- */
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "Authenticated user fetched successfully.",
+
+        user: req.user,
+      });
+    } catch (error: unknown) {
+      console.error(
+        "[AUTH] /me error:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
 
         message:
-          "Authentication required.",
+          "Failed to fetch authenticated user.",
       });
     }
-
-    return res.status(200).json({
-      success: true,
-
-      message:
-        "Authenticated user fetched successfully.",
-
-      user:
-        req.user,
-    });
   }
+
+  /* ==========================================================================
+     LOGOUT
+  ========================================================================== */
 
   static async logout(
     _req: Request,
     res: Response
   ) {
-    console.log(
-      "[AUTH] Logout started"
-    );
+    try {
+      console.log(
+        "[AUTH] Logout started"
+      );
 
-    res.clearCookie(
-      "accessToken",
-      cookieOptions
-    );
+      /* ----------------------------------------------------------------------
+         Clear access token
+      ---------------------------------------------------------------------- */
 
-    res.clearCookie(
-      "refreshToken",
-      cookieOptions
-    );
+      res.clearCookie(
+        "accessToken",
+        {
+          httpOnly: true,
 
-    return res.status(200).json({
-      success: true,
+          secure: isProduction,
 
-      message:
-        "Logged out successfully.",
-    });
+          sameSite:
+            isProduction
+              ? ("none" as const)
+              : ("lax" as const),
+
+          path: "/",
+        }
+      );
+
+      /* ----------------------------------------------------------------------
+         Clear refresh token
+      ---------------------------------------------------------------------- */
+
+      res.clearCookie(
+        "refreshToken",
+        {
+          httpOnly: true,
+
+          secure: isProduction,
+
+          sameSite:
+            isProduction
+              ? ("none" as const)
+              : ("lax" as const),
+
+          path: "/",
+        }
+      );
+
+      console.log(
+        "[AUTH] Authentication cookies cleared"
+      );
+
+      /* ----------------------------------------------------------------------
+         Logout successful
+      ---------------------------------------------------------------------- */
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "Logged out successfully.",
+      });
+    } catch (error: unknown) {
+      console.error(
+        "[AUTH] Logout error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+
+        message:
+          "Failed to logout.",
+      });
+    }
   }
 }
